@@ -1,0 +1,1 @@
+Evaluation of Output Embeddings for Fine-Grained Image Classification - model GoogLeNet
