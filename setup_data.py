@@ -17,11 +17,11 @@ from pathlib import Path
 
 def check_sun_dataset():
     """Check if SUN dataset is present."""
-    sun_path = Path('data/SUN/SUNAttributeDB')
+    sun_path = Path('data/SUN')
     required_files = [
-        'attributes.mat',
-        'images.mat',
-        'attributeLabels_continuous.mat',
+        'SUNAttributeDB/attributes.mat',
+        'SUNAttributeDB/images.mat',
+        'SUNAttributeDB/attributeLabels_continuous.mat',
         'images'  # Directory
     ]
     
