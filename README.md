@@ -118,53 +118,6 @@ Model CLIP (ViT-B/32) będzie pobrany automatycznie przy pierwszym uruchomieniu 
 └── README.md
 ```
 
-## Dlaczego dane są w .gitignore?
-
-**Dane i duże modele są ignorowane w Git** z kilku powodów:
-
-1. **Rozmiar plików** — SUN i CUB to gigabajty danych. Git nie powinien przechowywać takich zbiorów.
-2. **Przepustowość** — Każdy klonujący by musiał ściągać wszystkie dane (wolne).
-3. **Dedykowane repozytoria** — Dane powinny być dostępne via linki do źródeł (университет, badacze).
-4. **Best practices** — Kod → GitHub, Dane → osobne serwery (S3, Zenodo, itp.)
-
-**Rozwiązanie**: Instrukcje pobierania w README + skrypt `setup_data.py` ✓
-
-## Użycie
-
-### Analiza zbiorów danych
-```bash
-jupyter notebook datasets_tests.ipynb
-```
-
-### Ewaluacja modeli
-```bash
-jupyter notebook model_evaluation_sun.ipynb
-```
-
-## Troubleshooting
-
-### Problem: "FileNotFoundError: data/SUN/images/ not found"
-**Rozwiązanie:**
-```bash
-python setup_data.py --check  # Sprawdzić status danych
-python setup_data.py --sun    # Pobrać instrukcje
-```
-
-### Problem: CUDA out of memory
-**Rozwiązanie:** Zmniejsz `batch_size` w kodzie:
-```python
-dataloader = create_sun_dataloader(
-    ...,
-    batch_size=8  # zmienić z 16/64
-)
-```
-
-### Problem: CLIP model nie jest pobierany
-**Rozwiązanie:** Upewnij się że masz internet i `clip` zainstalowany:
-```bash
-pip install --upgrade clip-by-openai
-```
-
 ## Reference
 
 - **SUN Attributes Database**: [http://cs.mit.edu/~kadir/sunattributes/](http://cs.mit.edu/~kadir/sunattributes/)
