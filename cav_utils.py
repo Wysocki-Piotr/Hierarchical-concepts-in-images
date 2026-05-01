@@ -49,3 +49,43 @@ def calculate_hcep_cav(features_matrix, concept_indices, background_indices, par
 def projection_ratio(child_cav_raw, parent_cav):
     """Zwraca kwadrat projekcji surowego CAV dziecka na parent_cav."""
     return float(np.dot(child_cav_raw, parent_cav) ** 2)
+
+
+import numpy as np
+
+def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices, parent_pos_indices):
+    """
+    Calculates the Filtered CAV for a child concept (A), training on subset
+    where the parent concept (B) is present.
+    
+    Assumption: Concept A appears only in the context of concept B (A => B).
+    
+    Parameters:
+    - features_matrix: Feature matrix (embeddings)
+    - child_pos_indices: Indices where child concept A is present
+    - child_neg_indices: Indices where child concept A is NOT present
+    - parent_pos_indices: Indices where parent concept B is PRESENT
+    
+    Returns: Normalized CAV vector trained on the filtered subset.
+    """
+    # We use set intersection to get indices with (child and parent) and (parent without this child)
+    filtered_pos_idx = np.intersect1d(child_pos_indices, parent_pos_indices)
+    filtered_neg_idx = np.intersect1d(child_neg_indices, parent_pos_indices)
+    
+    # Check if there is anything left to learn after filtering
+    if len(filtered_pos_idx) == 0 or len(filtered_neg_idx) == 0:
+         raise ValueError(
+            'Not enough data after filtering the subset relative to the parent. '
+            'Ensure the child concept occurs within the parent concept.'
+        )
+         
+    mean_concept = np.mean(features_matrix[filtered_pos_idx], axis=0)
+    mean_background = np.mean(features_matrix[filtered_neg_idx], axis=0)
+    
+    cav = mean_concept - mean_background
+    
+    norm = np.linalg.norm(cav)
+    if norm > 1e-8:
+        return cav / norm
+    
+    raise ValueError('The CAV norm after filtering is close to zero.')
