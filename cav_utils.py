@@ -51,8 +51,6 @@ def projection_ratio(child_cav_raw, parent_cav):
     return float(np.dot(child_cav_raw, parent_cav) ** 2)
 
 
-import numpy as np
-
 def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices, parent_pos_indices):
     """
     Calculates the Filtered CAV for a child concept (A), training on subset
@@ -63,7 +61,7 @@ def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices
     Parameters:
     - features_matrix: Feature matrix (embeddings)
     - child_pos_indices: Indices where child concept A is present
-    - child_neg_indices: Indices where child concept A is NOT present
+    - child_neg_indices: Indices where child concept A is NOT present   
     - parent_pos_indices: Indices where parent concept B is PRESENT
     
     Returns: Normalized CAV vector trained on the filtered subset.
