@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+from scipy.stats import norm
 
 
 def calculate_centroid_cav(features_matrix, concept_indices, background_indices=None):
@@ -87,3 +88,77 @@ def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices
         return cav / norm
     
     raise ValueError('The CAV norm after filtering is close to zero.')
+
+
+def get_concept_distribution_stats(features_train, labels_train, cav_vector):
+    """
+    Calculates the statistics of the cosine similarity distribution for a specific concept
+    on the positive set (only on images that DEFINITELY have this concept).
+
+    Returns: (mu, sigma) - mean and standard deviation.
+    """
+    pos_features = features_train[labels_train == 1.0]
+    
+    if len(pos_features) < 2:
+        raise ValueError("Too litte positive samples to calculate distribution statistics reliably.")
+        
+    similarities = cosine_similarity(pos_features, cav_vector.reshape(1, -1)).flatten()
+    
+    mu = np.mean(similarities)
+    sigma = np.std(similarities)
+    
+    return mu, sigma
+
+
+def is_obs_in_concept(X_obs, cav_parent, mu_parent, sigma_parent, 
+                      cav_child, mu_child, sigma_child, prob_z_thresh=0.95):
+    """
+    Cascade inference for single new observation X_obs.
+    Returns a bool tuple (exists_parent_B, exists_child_A)
+
+
+    similarity_score >= (mu - z_threshold * sigma)
+    Checks if the similarity score falls 
+    within the concept distribution using one sided Z-Score: (x - mu)/ sigma >= -z_threshold
+    """
+    if sigma_parent == 0:
+        return False, False
+
+    X_obs = np.asarray(X_obs).flatten()
+    cav_parent = np.asarray(cav_parent).flatten()
+    cav_child = np.asarray(cav_child).flatten()
+    
+    norm_obs = np.linalg.norm(X_obs)
+    norm_parent = np.linalg.norm(cav_parent)
+    norm_child = np.linalg.norm(cav_child)
+
+    if norm_obs == 0 or norm_parent == 0 or norm_child == 0: 
+        return False, False
+
+    Z_SCORES = {
+    0.75: 0.67449, 
+    0.80: 0.84162,
+    0.85: 1.03643,
+    0.90: 1.28155,
+    0.95: 1.64485,
+    0.975: 1.95996,
+    0.99: 2.32634,
+    0.999: 3.09024
+    }
+
+    z_thresh = Z_SCORES.get(prob_z_thresh, 1.64485) # default to 1.64485 for 95% if not found
+    
+    sim_b = np.dot(X_obs, cav_parent) / (norm_obs * norm_parent)
+    #sim_b = cosine_similarity(X_obs, cav_parent.reshape(1, -1)).flatten()[0]
+    exists_b = bool( sim_b >= (mu_parent - z_thresh * sigma_parent) )
+
+    if not exists_b:
+        return False, False
+    if sigma_child == 0:
+        return True, False
+    
+    # sim_a = cosine_similarity(X_obs, cav_child.reshape(1, -1)).flatten()[0]
+    sim_a = np.dot(X_obs, cav_child) / (norm_obs * norm_child)
+    exists_a = bool( sim_a >= (mu_child - z_thresh * sigma_child) )
+    
+    return True, exists_a
