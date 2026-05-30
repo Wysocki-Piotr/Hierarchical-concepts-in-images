@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import f1_score
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.stats import norm
 
@@ -91,27 +92,57 @@ def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices
 
 
 
-
-
-@DeprecationWarning
-def get_concept_distribution_stats(features_train, labels_train, cav_vector):
+def is_obs_in_concept(X_obs: np.ndarray, 
+                      features: np.ndarray, labels: np.ndarray, 
+                      cav_vector: np.ndarray, num_steps: int = 25) -> bool:
     """
-    Calculates the statistics of the cosine similarity distribution for a specific concept
-    on the positive set (only on images that DEFINITELY have this concept).
-
-    Returns: (mu, sigma) - mean and standard deviation.
-    """
-    pos_features = features_train[labels_train == 1.0]
+    Determines if a single observation belongs to a specific concept.
     
-    if len(pos_features) < 2:
-        raise ValueError("Too litte positive samples to calculate distribution statistics reliably.")
+    This function dynamically calculates the optimal cosine similarity threshold 
+    by performing a quick grid search over the training features to maximize 
+    the F1-score. It then applies this optimal threshold to evaluate the new observation.
+    
+    Args:
+        X_obs (np.ndarray): The feature vector of the single new observation to be tested.
+        features (np.ndarray): The feature matrix of the training set used for grid search.
+        labels (np.ndarray): Binary labels (1.0 or 0.0) corresponding to the training set.
+        cav_vector (np.ndarray): The Concept Activation Vector (CAV) for the concept.
+        num_steps (int, optional): Number of threshold steps to search between -0.1 and 1.0. Defaults to 25.
         
-    similarities = cosine_similarity(pos_features, cav_vector.reshape(1, -1)).flatten()
+    Returns bool
+    """
+    features_norm = features / (np.linalg.norm(features, axis=1, keepdims=True) + 1e-10)
+    cav_norm = np.asarray(cav_vector).flatten() / (np.linalg.norm(cav_vector) + 1e-10)
     
-    mu = np.mean(similarities)
-    sigma = np.std(similarities)
+    similarities = np.dot(features_norm, cav_norm)
     
-    return mu, sigma
+    thresholds = np.linspace(-0.1, 1.0, num_steps)
+    
+    best_t = 0.0
+    best_f1 = 0.0
+    
+    # Grid search loop
+    for t in thresholds:
+        predictions = (similarities >= t).astype(int)
+        f1 = f1_score(labels, predictions, zero_division=0)
+        
+        if f1 > best_f1:
+            best_f1 = f1
+            best_t = t
+            
+    # 2. INFERENCE FOR X_obs (Pure NumPy optimization)
+    X_obs_flat = np.asarray(X_obs).flatten()
+    norm_obs = np.linalg.norm(X_obs_flat)
+    
+    if norm_obs == 0:
+        return False
+        
+    # Since cav_norm is already normalized, we only divide by norm_obs
+    sim = np.dot(X_obs_flat, cav_norm) / norm_obs
+
+    return bool(sim >= best_t)
+
+
 
 PARENTS_THRESHOLDS = {
     "enclosed area": 0.0667,
@@ -124,7 +155,7 @@ PARENTS_THRESHOLDS = {
     "open area": 0.0000
 }
 
-def is_obs_in_parent(X_obs: np.ndarray, name_parent: str, parent_cav_vector: np.ndarray) -> bool:
+def is_obs_in_parent_preevaluted(X_obs: np.ndarray, name_parent: str, parent_cav_vector: np.ndarray) -> bool:
     """
     Checks if the observation X_obs belongs to the parent concept defined by parent_cav_vector
     using a predefined threshold for that parent concept.
@@ -143,6 +174,28 @@ def is_obs_in_parent(X_obs: np.ndarray, name_parent: str, parent_cav_vector: np.
     sim = np.dot(X_obs, parent_cav_vector) / (norm_obs * norm_parent)
     
     return bool(sim >= threshold)
+
+def find_optimal_threshold_vectorized(features, labels, cav_vector, num_steps=25):
+    """
+    Ekstrakcja logiki Grid Search z funkcji 'is_obs_in_concept'.
+    Błyskawicznie wylicza optymalny próg na całym zbiorze treningowym.
+    """
+    features_norm = features / (np.linalg.norm(features, axis=1, keepdims=True) + 1e-10)
+    cav_norm = np.asarray(cav_vector).flatten() / (np.linalg.norm(cav_vector) + 1e-10)
+    
+    similarities = np.dot(features_norm, cav_norm)
+    thresholds = np.linspace(-0.1, 1.0, num_steps)
+    
+    best_t, best_f1 = 0.0, 0.0
+    for t in thresholds:
+        predictions = (similarities >= t).astype(int)
+        f1 = f1_score(labels, predictions, zero_division=0)
+        if f1 > best_f1:
+            best_f1, best_t = f1, t
+            
+    return best_t
+
+
 
 
 def get_matching_parent(X_obs, parent_cavs_dict, thresholds_dict):
