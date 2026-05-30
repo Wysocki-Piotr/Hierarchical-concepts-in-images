@@ -90,6 +90,10 @@ def calculate_filtered_cav(features_matrix, child_pos_indices, child_neg_indices
     raise ValueError('The CAV norm after filtering is close to zero.')
 
 
+
+
+
+@DeprecationWarning
 def get_concept_distribution_stats(features_train, labels_train, cav_vector):
     """
     Calculates the statistics of the cosine similarity distribution for a specific concept
@@ -109,56 +113,69 @@ def get_concept_distribution_stats(features_train, labels_train, cav_vector):
     
     return mu, sigma
 
+PARENTS_THRESHOLDS = {
+    "enclosed area": 0.0667,
+    "aged/ worn": 0.2222,
+    "working": 0.1556,
+    "natural light": -0.0444,
+    "rock/stone": 0.3333,
+    "cold": 0.3000,
+    "asphalt": 0.1778,
+    "open area": 0.0000
+}
 
-def is_obs_in_concept(X_obs, cav_parent, mu_parent, sigma_parent, 
-                      cav_child, mu_child, sigma_child, prob_z_thresh=0.95):
+def is_obs_in_parent(X_obs: np.ndarray, name_parent: str, parent_cav_vector: np.ndarray) -> bool:
     """
-    Cascade inference for single new observation X_obs.
-    Returns a bool tuple (exists_parent_B, exists_child_A)
-
-
-    similarity_score >= (mu - z_threshold * sigma)
-    Checks if the similarity score falls 
-    within the concept distribution using one sided Z-Score: (x - mu)/ sigma >= -z_threshold
+    Checks if the observation X_obs belongs to the parent concept defined by parent_cav_vector
+    using a predefined threshold for that parent concept.
     """
-    if sigma_parent == 0:
-        return False, False
-
+    if name_parent not in PARENTS_THRESHOLDS:
+        raise ValueError(f"Nie znaleziono progu dla pojęcia nadrzędnego: '{name_parent}'")
+    
+    threshold = PARENTS_THRESHOLDS[name_parent]
     X_obs = np.asarray(X_obs).flatten()
-    cav_parent = np.asarray(cav_parent).flatten()
-    cav_child = np.asarray(cav_child).flatten()
+    parent_cav_vector = np.asarray(parent_cav_vector).flatten()
     
     norm_obs = np.linalg.norm(X_obs)
-    norm_parent = np.linalg.norm(cav_parent)
-    norm_child = np.linalg.norm(cav_child)
-
-    if norm_obs == 0 or norm_parent == 0 or norm_child == 0: 
-        return False, False
-
-    Z_SCORES = {
-    0.75: 0.67449, 
-    0.80: 0.84162,
-    0.85: 1.03643,
-    0.90: 1.28155,
-    0.95: 1.64485,
-    0.975: 1.95996,
-    0.99: 2.32634,
-    0.999: 3.09024
-    }
-
-    z_thresh = Z_SCORES.get(prob_z_thresh, 1.64485) # default to 1.64485 for 95% if not found
+    norm_parent = np.linalg.norm(parent_cav_vector)
+    if norm_obs == 0 or norm_parent == 0: 
+        return False
+    sim = np.dot(X_obs, parent_cav_vector) / (norm_obs * norm_parent)
     
-    sim_b = np.dot(X_obs, cav_parent) / (norm_obs * norm_parent)
-    #sim_b = cosine_similarity(X_obs, cav_parent.reshape(1, -1)).flatten()[0]
-    exists_b = bool( sim_b >= (mu_parent - z_thresh * sigma_parent) )
+    return bool(sim >= threshold)
 
-    if not exists_b:
-        return False, False
-    if sigma_child == 0:
-        return True, False
-    
-    # sim_a = cosine_similarity(X_obs, cav_child.reshape(1, -1)).flatten()[0]
-    sim_a = np.dot(X_obs, cav_child) / (norm_obs * norm_child)
-    exists_a = bool( sim_a >= (mu_child - z_thresh * sigma_child) )
-    
-    return True, exists_a
+
+def get_matching_parent(X_obs, parent_cavs_dict, thresholds_dict):
+    """
+    Sprawdza do jakiego środowiska (rodzica) należy dana obserwacja.
+    Zwraca pierwszy dopasowany kontekst: (nazwa_rodzica, wektor_rodzica) 
+    lub (None, False), jeśli obserwacja nie należy do żadnego.
+    """
+    X_obs_flat = np.asarray(X_obs).flatten()
+    norm_obs = np.linalg.norm(X_obs_flat)
+
+    if norm_obs == 0:
+        return None, False
+
+    # Przeszukujemy dostępnych rodziców
+    for parent_name, parent_cav in parent_cavs_dict.items():
+        if parent_name not in thresholds_dict:
+            continue
+            
+        threshold = thresholds_dict[parent_name]
+        
+        cav_flat = np.asarray(parent_cav).flatten()
+        norm_cav = np.linalg.norm(cav_flat)
+        
+        if norm_cav == 0:
+            continue
+            
+        # Szybki kosinus w czystym NumPy
+        sim = np.dot(X_obs_flat, cav_flat) / (norm_obs * norm_cav)
+        
+        # Jeśli podobieństwo przekracza twardy próg, przerywamy i zwracamy sukces
+        if sim >= threshold:
+            return parent_name, parent_cav
+            
+    # Zwracamy False, jeśli żaden rodzic nie został dopasowany
+    return None, False
